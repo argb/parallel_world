@@ -99,7 +99,8 @@ func SavePID(id peer.ID, uname string) error {
 	defer db.Close()
 
 	err = db.Update(func(txn *badger.Txn) error {
-		err := txn.Set([]byte(uname), []byte(id))
+		log.Printf("uname %s and pid %s to save: ", uname, id.Pretty())
+		err := txn.Set([]byte(uname), []byte(id.Pretty()))
 
 		return err
 	})
@@ -127,9 +128,9 @@ func GetPIDFromLocalStorage(uname string) string {
 
 		var valCopy []byte
 		err = item.Value(func(val []byte) error {
-			fmt.Printf("The pid is: %s\n", val)
 			valCopy = append([]byte{}, val...)
 			pid = string(valCopy)
+			log.Printf("The uname is %s, pid is: %s\n", uname, pid)
 			return nil
 		})
 

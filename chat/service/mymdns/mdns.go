@@ -2,10 +2,11 @@ package mymdns
 
 import (
 	"context"
-	"fmt"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
+	"log"
 )
 
 // DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
@@ -22,17 +23,22 @@ type DiscoveryNotifee struct {
 // the PubSub system will automatically start interacting with them if they also
 // support PubSub.
 func (n *DiscoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
-	//fmt.Printf("discovered new peer %s\n", pi.ID.Pretty())
+	log.Printf("discovered new peer %s\n", pi.ID.Pretty())
 
 	//n.PeerChan <- pi
 
 	if n.AutoConnect {
 		err := n.Host.Connect(context.Background(), pi)
 		if err != nil {
-			fmt.Printf("error connecting to peer %s: %s\n", pi.ID.Pretty(), err)
+			log.Printf("error connecting to peer %s: %s\n", pi.ID.Pretty(), err)
 		}
-		//fmt.Printf("conntected to %v\n", pi.ID.Pretty())
+		log.Printf("conntected to %v\n", pi.ID.Pretty())
 	}
+	for _, pa := range pi.Addrs {
+		log.Printf("address: %v\n", pa.String())
+	}
+	log.Printf("addresses %#v saved\n", pi.Addrs)
+	n.Host.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.PermanentAddrTTL)
 }
 
 func InitMDNS(peerHost host.Host, rendezvous string) chan peer.AddrInfo{
@@ -55,6 +61,7 @@ func InitMDNS(peerHost host.Host, rendezvous string) chan peer.AddrInfo{
 func SetupDiscovery(h host.Host) error {
 	// setup mDNS discovery to find local peers
 	InitMDNS(h, DiscoveryServiceTag)
+
 
 	return nil
 }

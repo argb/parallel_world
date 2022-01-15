@@ -128,5 +128,6 @@ func (cr *ChatRoom) ReadLoopP() {
 }
 
 func (cr *ChatRoom) ListPeers() []peer.ID {
+
 	return cr.Ps.ListPeers(topicName(cr.RoomName))
 }

@@ -37,7 +37,7 @@ func NewChatUI(cr *chatroom.ChatRoom) *ChatUI {
 	msgBoxPrivate := tview.NewTextView()
 	msgBoxPrivate.SetDynamicColors(true)
 	msgBoxPrivate.SetBorder(true)
-	msgBoxPrivate.SetTitle(fmt.Sprintf("Room: %s", cr.RoomName))
+	msgBoxPrivate.SetTitle("Private Chat")
 
 	msgBoxPrivate.SetChangedFunc(func() {
 		app.Draw()
@@ -73,12 +73,15 @@ func NewChatUI(cr *chatroom.ChatRoom) *ChatUI {
 			return
 		}
 		command, data := cmd.ParseInput(line)
+		log.Printf("command:%#v, data:%#v\n", command, data)
 		switch command.(type) {
 		case cmd.AtCmd:
-			uname := command.(cmd.AtCmd).Operator
-			fmt.Printf("target:%s\n", uname)
+			uname := command.(cmd.AtCmd).Operand
+			log.Printf("target:%v\n", uname)
 			pid := common.GetPIDByUsername(uname)
 			s, err := cr.Host.NewStream(cr.Ctx, peer.ID(pid), protocol.ChatOne2OneProtocol)
+			// todo 奇怪，明明Peerstore已经存了地址信息，为啥这里没有呢
+			log.Printf("target %#v addresses: %#v\n", peer.ID(pid), cr.Host.Peerstore().Addrs(peer.ID(pid)))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -107,7 +110,7 @@ func NewChatUI(cr *chatroom.ChatRoom) *ChatUI {
 	chatPanel := tview.NewFlex().
 		AddItem(msgBoxPrivate, 0, 1, false).
 		AddItem(msgBox, 0, 1, false).
-		AddItem(peersList, 20, 1, false)
+		AddItem(peersList, 40, 1, false)
 
 	// flex is a vertical box with the chatPanel on top and the input field at the bottom.
 
@@ -154,7 +157,8 @@ func (ui *ChatUI) refreshPeers() {
 	ui.peersList.Unlock()
 
 	for _, pid := range pids {
-		fmt.Fprintln(ui.peersList, helper.ShortID(pid))
+		//fmt.Fprintln(ui.peersList, helper.ShortID(pid))
+		fmt.Fprintln(ui.peersList, pid)
 	}
 
 	ui.app.Draw()
