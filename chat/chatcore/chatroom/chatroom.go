@@ -3,7 +3,6 @@ package chatroom
 import (
 	"context"
 	"encoding/json"
-	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-pubsub"
@@ -14,12 +13,11 @@ import (
 const ChatRoomBufSize = 128
 
 type ChatRoom struct {
-	Messages chan *ChatMessage
-	PrivateMessages chan *ChatMessage // for private chat
+	Messages chan *common.ChatMessage
+	PrivateMessages chan *common.ChatMessage // for private chat
 
 	Ctx context.Context
 	Ps *pubsub.PubSub
-	Stream core.Stream // for private chat
 	Topic *pubsub.Topic
 	Sub *pubsub.Subscription
 
@@ -29,11 +27,16 @@ type ChatRoom struct {
 	Host host.Host
 }
 
-type ChatMessage struct {
-	Message string
-	SenderID string
-	SenderNick string
+
+var ChatRoomMessages chan *common.ChatMessage
+
+
+
+func init() {
+	ChatRoomMessages = make(chan *common.ChatMessage, ChatRoomBufSize)
+
 }
+
 
 func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, self host.Host, nickname string, roomName string) (*ChatRoom, error) {
 	// 创建主题
@@ -55,8 +58,7 @@ func JoinChatRoom(ctx context.Context, ps *pubsub.PubSub, self host.Host, nickna
 		SelfID: self.ID(),
 		Nick: nickname,
 		RoomName: roomName,
-		Messages: make(chan *ChatMessage, ChatRoomBufSize),
-		PrivateMessages: make(chan *ChatMessage, ChatRoomBufSize),
+		Messages: ChatRoomMessages,
 	}
 
 	go cr.readLoop()
@@ -70,7 +72,7 @@ func topicName(roomName string) string {
 }
 
 func (cr *ChatRoom) Publish(message string) error {
-	m := ChatMessage{
+	m := common.ChatMessage{
 		Message: message,
 		SenderID: cr.SelfID.Pretty(),
 		SenderNick: cr.Nick,
@@ -94,36 +96,13 @@ func (cr *ChatRoom) readLoop() {
 		if msg.ReceivedFrom == cr.SelfID {
 			continue
 		}
-		cm := new(ChatMessage)
+		cm := new(common.ChatMessage)
 		err = json.Unmarshal(msg.Data, cm)
 		if err != nil {
 			log.Printf("invalid msg: %v\n", msg)
 			continue
 		}
 		cr.Messages <- cm
-	}
-}
-
-func (cr *ChatRoom) ReadLoopP() {
-	for {
-		var buffer []byte
-		_, err := cr.Stream.Read(buffer)
-		if err != nil {
-			close(cr.Messages)
-			return
-		}
-
-		cm := new(ChatMessage)
-		err = json.Unmarshal(buffer, cm)
-		if err != nil {
-			log.Printf("invalid msg: %v\n", buffer)
-			continue
-		}
-		err = common.SavePid(peer.ID(cm.SenderID), cm.SenderNick)
-		if err != nil {
-			log.Fatal("save pid error:", err)
-		}
-		cr.PrivateMessages <- cm
 	}
 }
 

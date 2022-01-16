@@ -36,7 +36,6 @@ func NewApp() *App {
 }
 
 func (app *App) Run() {
-	log.Println("This is a test log entry2")
 	//me := common.NewUser()
 
 	help := flag.Bool("help", false, "Display Help")
@@ -58,7 +57,8 @@ func (app *App) Run() {
 
 	ctx := context.Background()
 
-	h := myhost.MakeChatHost()
+	//h := myhost.MakeChatHost()
+	h := myhost.MakeBasicHost()
 
 	tracer, err := pubsub.NewJSONTracer("/tmp/trace/trace.json")
 	if err != nil {
@@ -79,6 +79,7 @@ func (app *App) Run() {
 	if len(nick) == 0 {
 		nick = helper.DefaultNick(h.ID())
 	}
+	common.MyNick = nick
 
 	// 存储name:pid
 	err = common.SavePid(h.ID(), nick)
@@ -95,6 +96,12 @@ func (app *App) Run() {
 	}
 
 	ui := TextUI.NewChatUI(cr)
+
+	tagStr1, err := h.Peerstore().Get(mymdns.GlobalPID, "wg")
+	if err != nil {
+		log.Println("get tag error:", err)
+	}
+	log.Printf("gid:%v, tag2:%v", mymdns.GlobalPID, tagStr1.(string))
 
 	if err = ui.Run(); err != nil {
 		helper.PrintErr("running text UI error: %s", err)

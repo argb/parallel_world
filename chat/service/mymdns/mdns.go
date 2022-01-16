@@ -12,6 +12,8 @@ import (
 // DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
 const DiscoveryServiceTag = "parallel_world_chat"
 
+var GlobalPID peer.ID
+
 type DiscoveryNotifee struct {
 	PeerChan chan peer.AddrInfo
 	Host host.Host
@@ -24,6 +26,11 @@ type DiscoveryNotifee struct {
 // support PubSub.
 func (n *DiscoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 	log.Printf("discovered new peer %s\n", pi.ID.Pretty())
+
+	if n.Host.ID() == pi.ID {
+		log.Println("ignore self:", pi.ID.Pretty())
+		return
+	}
 
 	//n.PeerChan <- pi
 
@@ -38,7 +45,34 @@ func (n *DiscoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 		log.Printf("address: %v\n", pa.String())
 	}
 	log.Printf("addresses %#v saved\n", pi.Addrs)
-	n.Host.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.PermanentAddrTTL)
+	ps := n.Host.Peerstore()
+	GlobalPID = pi.ID
+	ps.AddAddrs(pi.ID, pi.Addrs, peerstore.PermanentAddrTTL)
+	if err := ps.Put(pi.ID, "wg", "test"); err != nil {
+		log.Fatal("store test tag error:", err)
+	}
+
+	tagStr, err := ps.Get(pi.ID, "wg")
+	if err != nil {
+		log.Println("get tag error:", err)
+	}
+	log.Println("tag:", tagStr.(string))
+
+	tagStr1, err := n.Host.Peerstore().Get(pi.ID, "wg")
+	if err != nil {
+		log.Println("get tag error:", err)
+	}
+	log.Println("tag1:", tagStr1.(string))
+
+	/*
+	n.Host.SetStreamHandler(protocol.ChatOne2OneProtocol, one2one.HandleOne2OneChatStream)
+	s, err := n.Host.NewStream(context.Background(), pi.ID, protocol.ChatOne2OneProtocol)
+	if err != nil {
+		log.Fatal("start a new stream error:", err)
+	}
+	fmt.Println("stream:", s.Protocol())
+
+	 */
 }
 
 func InitMDNS(peerHost host.Host, rendezvous string) chan peer.AddrInfo{

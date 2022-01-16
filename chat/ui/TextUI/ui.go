@@ -9,9 +9,11 @@ import (
 	"log"
 	"parallel_world/chat/chatcore/chatroom"
 	"parallel_world/chat/chatcore/common"
+	"parallel_world/chat/chatcore/one2one"
 	"parallel_world/chat/cmd"
 	"parallel_world/chat/helper"
 	"parallel_world/chat/protocol"
+	"parallel_world/chat/service/mymdns"
 	"time"
 )
 
@@ -37,7 +39,7 @@ func NewChatUI(cr *chatroom.ChatRoom) *ChatUI {
 	msgBoxPrivate := tview.NewTextView()
 	msgBoxPrivate.SetDynamicColors(true)
 	msgBoxPrivate.SetBorder(true)
-	msgBoxPrivate.SetTitle("Private Chat")
+	msgBoxPrivate.SetTitle(" Private Chat")
 
 	msgBoxPrivate.SetChangedFunc(func() {
 		app.Draw()
@@ -79,15 +81,33 @@ func NewChatUI(cr *chatroom.ChatRoom) *ChatUI {
 			uname := command.(cmd.AtCmd).Operand
 			log.Printf("target:%v\n", uname)
 			pid := common.GetPIDByUsername(uname)
-			s, err := cr.Host.NewStream(cr.Ctx, peer.ID(pid), protocol.ChatOne2OneProtocol)
-			// todo 奇怪，明明Peerstore已经存了地址信息，为啥这里没有呢
-			log.Printf("target %#v addresses: %#v\n", peer.ID(pid), cr.Host.Peerstore().Addrs(peer.ID(pid)))
+			PID := peer.ID(pid)
+			log.Printf("pid:%v, PID:%v, GID:%v\n", pid, PID, mymdns.GlobalPID)
+
+			tag, err := cr.Host.Peerstore().Get(mymdns.GlobalPID, "wg")
 			if err != nil {
-				log.Fatal(err)
+				log.Fatal("get t1 error:", err)
 			}
-			cr.Stream = s
-			inputChanP <- data
-			go cr.ReadLoopP()
+			log.Printf("addr tag1: %#v\n", tag)
+
+			tag, err = cr.Host.Peerstore().Get(PID, "wg")
+			if err != nil {
+				log.Fatal("get t error:", err)
+			}
+			log.Printf("addr tag: %#v\n", tag)
+			log.Printf("protocols: %#v", cr.Host.Mux().Protocols())
+			s, err := cr.Host.NewStream(cr.Ctx, peer.ID(pid), protocol.ChatOne2OneProtocol)
+
+			// todo 奇怪，明明Peerstore已经存了地址信息，为啥这里没有呢
+			log.Printf("my host id:%#v, target %#v addresses: %#v\n",cr.Host.ID().Pretty(), peer.ID(pid), cr.Host.Peerstore().Addrs(peer.ID(pid)))
+			if err != nil {
+				log.Fatal("new stream error:", err)
+			}
+			chat := one2one.NewOne2OneChat(s,pid, common.MyNick)
+			inputChanP <- data // 用于写入标准输入，显示在本地界面上
+			//chat.SendMassage(data) // 写入网络，发送到对端
+			one2one.CurrentChat = chat
+			log.Println("done1")
 		case cmd.QuitCmd:
 			app.Stop()
 			return
@@ -166,7 +186,7 @@ func (ui *ChatUI) refreshPeers() {
 
 // displayChatMessage writes a ChatMessage from the room to the message window,
 // with the sender's nick highlighted in green.
-func (ui *ChatUI) displayChatMessage(cm *chatroom.ChatMessage) {
+func (ui *ChatUI) displayChatMessage(cm *common.ChatMessage) {
 	prompt := withColor("green", fmt.Sprintf("<%s>:", cm.SenderNick))
 	fmt.Fprintf(ui.msgW, "%s %s\n", prompt, cm.Message)
 }
@@ -180,7 +200,7 @@ func (ui *ChatUI) displaySelfMessage(msg string) {
 
 // displayChatMessage writes a ChatMessage from the room to the message window,
 // with the sender's nick highlighted in green.
-func (ui *ChatUI) displayPrivateChatMessage(cm *chatroom.ChatMessage) {
+func (ui *ChatUI) displayPrivateChatMessage(cm *common.ChatMessage) {
 	prompt := withColor("green", fmt.Sprintf("<%s>:", cm.SenderNick))
 	fmt.Fprintf(ui.msgWP, "%s %s\n", prompt, cm.Message)
 }
@@ -203,14 +223,15 @@ func (ui *ChatUI) handleEvents() {
 	for {
 		select {
 		case inputP := <- ui.inputChanP:
-			_, err := ui.cr.Stream.Write([]byte(inputP))
-			if err != nil {
-				helper.PrintErr("send private msg error: %s", err)
-			}
+			log.Println("done1.1")
+			one2one.CurrentChat.SendMassage(inputP)
+			log.Println("done1.2")
 			ui.displayPrivateSelfMessage(inputP)
+			log.Println("done2")
 		case pm := <-ui.cr.PrivateMessages:
 			// when we receive a message from the chat room, print it to the message window
 			ui.displayPrivateChatMessage(pm)
+			log.Println("done3")
 		case input := <-ui.inputChan:
 			// when the user types in a line, publish it to the chat room and print to the message window
 			err := ui.cr.Publish(input)
